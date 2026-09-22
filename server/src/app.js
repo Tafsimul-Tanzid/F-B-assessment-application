@@ -6,6 +6,7 @@ import { config } from './config/index.js';
 import { requestContext } from './middleware/requestContext.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import healthRoutes from './routes/health.routes.js';
+import apiRoutes from './routes/index.js';
 
 /**
  * Builds the Express app without starting it, so tests can drive it through
@@ -30,6 +31,7 @@ export function createApp() {
   app.use(requestContext);
 
   app.use(healthRoutes);
+  app.use('/api', apiRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
