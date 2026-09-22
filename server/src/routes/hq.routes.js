@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import * as hq from '../controllers/hq.controller.js';
+import * as reports from '../controllers/report.controller.js';
 import { authenticate, requireRole, ROLES } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -16,6 +17,7 @@ import {
   updateAssignmentSchema,
   updateMenuItemSchema,
 } from '../validation/hq.schemas.js';
+import { revenueReportSchema, topItemsReportSchema } from '../validation/report.schemas.js';
 
 const router = Router();
 
@@ -54,5 +56,9 @@ router.post(
   validate(adjustStockSchema),
   asyncHandler(hq.adjustStock),
 );
+
+// --- reporting -------------------------------------------------------------
+router.get('/reports/revenue', validate(revenueReportSchema), asyncHandler(reports.revenueByOutlet));
+router.get('/reports/top-items', validate(topItemsReportSchema), asyncHandler(reports.topItemsByOutlet));
 
 export default router;
