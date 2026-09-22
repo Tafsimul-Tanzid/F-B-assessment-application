@@ -77,6 +77,44 @@ export async function adjust(outletId, menuItemId, delta, { transaction }) {
   return rows[0] ?? null;
 }
 
+/**
+ * Deducts stock for one line of a sale. This is the write that must never
+ * produce a negative balance.
+ *
+ * The `quantity >= $3` guard lives in the WHERE clause rather than in a
+ * read-then-write in JavaScript, and that placement is the whole mechanism:
+ *
+ *   - If a concurrent transaction holds the row lock, this UPDATE blocks. When
+ *     the other transaction commits, Postgres does NOT proceed from this
+ *     transaction's original snapshot — it re-reads the newly committed row
+ *     and re-evaluates the entire WHERE clause against it, guard included
+ *     (EvalPlanQual). The check is therefore always made against the latest
+ *     committed quantity, so a lost update is impossible.
+ *   - Doing the comparison in JS would be wrong twice over: it would race, and
+ *     `numeric` arrives as a string, where "9" >= "10" is true.
+ *
+ * Returns the remaining quantity, or null when the guard rejected the update —
+ * which the caller disambiguates, because null also covers "no such row".
+ */
+export async function deduct(outletId, menuItemId, qty, { transaction }) {
+  if (!transaction) throw new Error('deduct requires a transaction');
+
+  const rows = await sequelize.query(
+    `UPDATE inventory
+        SET quantity = quantity - $3,
+            updated_at = now()
+      WHERE outlet_id = $1
+        AND menu_item_id = $2
+        AND quantity >= $3
+      RETURNING quantity AS "remaining"`,
+    { bind: [outletId, menuItemId, qty], type: QueryTypes.SELECT, transaction },
+  );
+
+  // RETURNING is used rather than the driver's row count because the shape of
+  // Sequelize's raw-query metadata is dialect-specific.
+  return rows[0] ?? null;
+}
+
 export async function removeRow(outletId, menuItemId, { transaction }) {
   if (!transaction) throw new Error('removeRow requires a transaction');
 
