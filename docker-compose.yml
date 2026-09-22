@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fnb-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fnb_pos
+    ports:
+      # Host port 5433, not 5432: a natively installed Postgres commonly owns
+      # 5432, and on macOS `localhost` resolves to ::1 first, so a clash there
+      # silently routes the app to the wrong database.
+      - '5433:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # The API waits on this rather than sleeping, so a cold start is not a
+      # race between migrations and a database that is still initialising.
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d fnb_pos']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: ./server
+    container_name: fnb-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4010
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: fnb_pos
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_SSL: 'false'
+      DB_POOL_MAX: 20
+      JWT_SECRET: local-compose-secret-not-for-production
+      CORS_ORIGIN: http://localhost:5173,http://localhost:8081
+      LOG_LEVEL: info
+      RUN_MIGRATIONS_ON_BOOT: 'true'
+      SEED_ON_BOOT: 'true'
+    ports:
+      - '4010:4010'
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_API_BASE_URL: http://localhost:4010
+    container_name: fnb-web
+    depends_on:
+      - api
+    ports:
+      - '8081:80'
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
