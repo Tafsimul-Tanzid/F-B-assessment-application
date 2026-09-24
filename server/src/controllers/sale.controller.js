@@ -21,3 +21,14 @@ export async function getSale(req, res) {
   const sale = await saleService.getSale(req.validated.params.id, req.outletId);
   res.json({ sale });
 }
+
+export async function voidSale(req, res) {
+  const sale = await saleService.voidSale({
+    saleId: req.validated.params.id,
+    outletId: req.outletId,
+    userId: req.user.id,
+    reason: req.validated.body.reason,
+  });
+
+  res.json({ sale });
+}

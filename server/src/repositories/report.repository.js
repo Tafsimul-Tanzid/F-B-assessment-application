@@ -40,6 +40,9 @@ export async function revenueByOutlet({ from, to }, { transaction } = {}) {
       FROM outlets o
       LEFT JOIN sales s
              ON s.outlet_id = o.id
+            -- Voided sales are excluded everywhere. Without this they would
+            -- inflate revenue with money that was handed back.
+            AND s.status = 'completed'
             AND ($1::timestamptz IS NULL OR s.sold_at >= $1)
             AND ($2::timestamptz IS NULL OR s.sold_at <  $2)
      GROUP BY o.id, o.code, o.name
@@ -72,7 +75,8 @@ export async function topItemsByOutlet({ from, to, limit = 5 }, { transaction } 
              (ARRAY_AGG(si.item_name ORDER BY s.sold_at DESC))[1] AS item_name
         FROM sales s
         JOIN sale_items si ON si.sale_id = s.id
-       WHERE ($1::timestamptz IS NULL OR s.sold_at >= $1)
+       WHERE s.status = 'completed'
+         AND ($1::timestamptz IS NULL OR s.sold_at >= $1)
          AND ($2::timestamptz IS NULL OR s.sold_at <  $2)
        GROUP BY s.outlet_id, si.menu_item_id
     ),

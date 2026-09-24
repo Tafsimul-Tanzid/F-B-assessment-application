@@ -13,14 +13,14 @@ export async function getOutlet(id) {
 }
 
 /**
- * Creating an outlet also creates its receipt counter row, in one
- * transaction. An outlet without a counter row cannot sell, so the two must
- * not be able to exist apart.
+ * Creating an outlet also creates its counter rows, in one transaction. An
+ * outlet without them cannot sell or void, so they must not be able to exist
+ * apart from the outlet.
  */
 export async function createOutlet(data) {
   const existing = await sequelize.transaction(async (transaction) => {
     const outlet = await outletRepository.create(data, { transaction });
-    await outletRepository.createReceiptCounter(outlet.id, { transaction });
+    await outletRepository.createCounters(outlet.id, { transaction });
     return outlet;
   }).catch((error) => {
     if (error?.original?.constraint === 'outlets_code_key') {

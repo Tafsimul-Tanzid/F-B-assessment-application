@@ -38,7 +38,8 @@ export async function migrateOnce() {
 export async function resetDatabase() {
   await sequelize.query(`
     TRUNCATE sale_items, sales, inventory, outlet_menu_items,
-             outlet_receipt_counters, users, menu_items, outlets
+             outlet_receipt_counters, outlet_credit_note_counters,
+             users, menu_items, outlets
     RESTART IDENTITY CASCADE
   `);
 
@@ -55,6 +56,12 @@ export async function resetDatabase() {
 
   await exec(
     `INSERT INTO outlet_receipt_counters (outlet_id, last_receipt_no) VALUES ($1, 0), ($2, 0)`,
+    [IDS.outletA, IDS.outletB],
+  );
+
+  // Receipts and voids are numbered from separate per-outlet sequences.
+  await exec(
+    `INSERT INTO outlet_credit_note_counters (outlet_id, last_credit_note_no) VALUES ($1, 0), ($2, 0)`,
     [IDS.outletA, IDS.outletB],
   );
 

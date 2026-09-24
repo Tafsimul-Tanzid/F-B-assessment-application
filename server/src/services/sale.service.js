@@ -4,6 +4,7 @@ import { sequelize } from '../db/sequelize.js';
 import { config } from '../config/index.js';
 import { isRetryableDbError, mapDbError } from '../db/errors.js';
 import {
+  ConflictError,
   InsufficientStockError,
   ItemNotStockedError,
   NotFoundError,
@@ -235,4 +236,93 @@ export async function getSale(saleId, outletId) {
   const sale = await saleRepository.findByIdForOutlet(saleId, outletId);
   if (!sale) throw new NotFoundError('Sale');
   return sale;
+}
+
+/**
+ * Voids a sale and returns its stock to the shelf.
+ *
+ * A sale is a financial record of something that happened, so voiding never
+ * deletes the row and never frees the receipt number. The sale is marked,
+ * and the void is issued its own number from a separate per-outlet
+ * credit-note sequence, so the books carry both documents.
+ *
+ * Transaction order, chosen to match the sale path rather than to read well:
+ *
+ *   1. mark voided + allocate credit note   (locks the sales row)
+ *   2. restore stock, ascending menu_item_id (inventory row locks)
+ *
+ * Marking first serialises concurrent voids of the same sale immediately and
+ * fails the loser before it does any work. Restoring stock in ascending
+ * menu_item_id order is the same global lock order the sale path uses, which
+ * is what keeps a void and a concurrent sale of the same items from ever
+ * holding locks in opposite orders.
+ */
+export async function voidSale({ saleId, outletId, userId, reason }) {
+  return withRetry(async () => {
+    try {
+      return await sequelize.transaction(
+        { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
+        async (transaction) => {
+          await sequelize.query(`SET LOCAL lock_timeout = '${config.db.lockTimeoutMs}ms'`, {
+            transaction,
+          });
+
+          const voided = await saleRepository.voidSale(
+            { saleId, outletId, userId, reason },
+            { transaction },
+          );
+
+          if (!voided) {
+            // The guarded update matched nothing. One read on this cold path
+            // separates "no such sale here" from "already voided".
+            const current = await saleRepository.findStatus(saleId, outletId, { transaction });
+
+            if (!current) throw new NotFoundError('Sale');
+
+            throw new ConflictError(
+              `Receipt #${current.receiptNo} was already voided (credit note #${current.creditNoteNo})`,
+              'ALREADY_VOIDED',
+              { saleId, receiptNo: current.receiptNo, creditNoteNo: current.creditNoteNo },
+            );
+          }
+
+          const items = await saleRepository.findItemsForVoid(saleId, { transaction });
+
+          const restored = [];
+          for (const item of items) {
+            const result = await inventoryRepository.restore(
+              outletId,
+              item.menuItemId,
+              item.quantity,
+              { transaction },
+            );
+
+            // The item has since been unassigned from this outlet, so there is
+            // no stock row to credit. That must not block the refund - the
+            // money side is what the customer is owed - so it is recorded and
+            // reported back rather than thrown.
+            restored.push({
+              menuItemId: item.menuItemId,
+              itemName: item.itemName,
+              quantity: item.quantity,
+              stockRestored: result !== null,
+            });
+          }
+
+          const unrestored = restored.filter((r) => !r.stockRestored);
+          if (unrestored.length) {
+            logger.warn('Voided a sale containing items no longer stocked at the outlet', {
+              saleId,
+              outletId,
+              items: unrestored.map((r) => r.itemName),
+            });
+          }
+
+          return { ...voided, outletId, restoredItems: restored };
+        },
+      );
+    } catch (error) {
+      throw mapDbError(error);
+    }
+  });
 }

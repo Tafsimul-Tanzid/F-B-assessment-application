@@ -31,3 +31,14 @@ export const listSalesSchema = {
 export const saleIdSchema = {
   params: z.object({ id: uuid }),
 };
+
+export const voidSaleSchema = {
+  params: z.object({ id: uuid }),
+  body: z
+    .object({
+      // Required, and not free-for-all length: a void is an auditable event,
+      // and "why" is the whole value of the record to whoever reviews it later.
+      reason: z.string().trim().min(3, 'A reason is required').max(280),
+    })
+    .strict(),
+};

@@ -5,7 +5,12 @@ import * as sale from '../controllers/sale.controller.js';
 import { authenticate, outletScope } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { createSaleSchema, listSalesSchema, saleIdSchema } from '../validation/sale.schemas.js';
+import {
+  createSaleSchema,
+  listSalesSchema,
+  saleIdSchema,
+  voidSaleSchema,
+} from '../validation/sale.schemas.js';
 
 const router = Router();
 
@@ -20,5 +25,6 @@ router.get('/inventory', asyncHandler(outlet.listInventory));
 router.post('/sales', validate(createSaleSchema), asyncHandler(sale.createSale));
 router.get('/sales', validate(listSalesSchema), asyncHandler(sale.listSales));
 router.get('/sales/:id', validate(saleIdSchema), asyncHandler(sale.getSale));
+router.post('/sales/:id/void', validate(voidSaleSchema), asyncHandler(sale.voidSale));
 
 export default router;

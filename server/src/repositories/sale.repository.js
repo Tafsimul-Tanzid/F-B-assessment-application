@@ -142,6 +142,10 @@ export async function findByIdForOutlet(saleId, outletId, { transaction } = {}) 
            s.total_amount AS "totalAmount",
            s.item_count   AS "itemCount",
            s.sold_at      AS "soldAt",
+           s.status       AS "status",
+           s.credit_note_no AS "creditNoteNo",
+           s.voided_at    AS "voidedAt",
+           s.void_reason  AS "voidReason",
            u.full_name    AS "cashierName"
       FROM sales s
       JOIN outlets o ON o.id = s.outlet_id
@@ -176,6 +180,8 @@ export async function findByOutlet(outletId, { from, to, limit = 50 } = {}, { tr
            s.total_amount AS "totalAmount",
            s.item_count   AS "itemCount",
            s.sold_at      AS "soldAt",
+           s.status       AS "status",
+           s.credit_note_no AS "creditNoteNo",
            u.full_name    AS "cashierName"
       FROM sales s
       LEFT JOIN users u ON u.id = s.cashier_id
@@ -191,4 +197,81 @@ export async function findByOutlet(outletId, { from, to, limit = 50 } = {}, { tr
       transaction,
     },
   );
+}
+
+/**
+ * Marks a sale voided and allocates its credit note number, in one statement.
+ *
+ * The `AND status = 'completed'` predicate is the same guarded-update
+ * technique the stock deduction uses, and it is what makes a double void
+ * impossible rather than merely unlikely. Two concurrent voids of the same
+ * sale both target this row; the second blocks on the row lock, and when the
+ * first commits, Postgres re-evaluates the WHERE clause against the newly
+ * committed row, sees status = 'voided', and matches nothing. No row comes
+ * back, and the caller reports a conflict.
+ *
+ * The credit note counter is bumped in the same statement and, as with the
+ * receipt counter, this is the LAST lock the void transaction takes.
+ */
+export async function voidSale({ saleId, outletId, userId, reason }, { transaction }) {
+  if (!transaction) throw new Error('voidSale requires a transaction');
+
+  const rows = await sequelize.query(
+    `
+    WITH next_credit_note AS (
+      UPDATE outlet_credit_note_counters
+         SET last_credit_note_no = last_credit_note_no + 1
+       WHERE outlet_id = $2
+      RETURNING last_credit_note_no
+    )
+    UPDATE sales
+       SET status         = 'voided',
+           voided_at      = now(),
+           voided_by      = $3,
+           void_reason    = $4,
+           credit_note_no = (SELECT last_credit_note_no FROM next_credit_note)
+     WHERE id        = $1
+       AND outlet_id = $2
+       AND status    = 'completed'
+    RETURNING id             AS "id",
+              receipt_no     AS "receiptNo",
+              credit_note_no AS "creditNoteNo",
+              total_amount   AS "totalAmount",
+              status         AS "status",
+              voided_at      AS "voidedAt"
+    `,
+    { bind: [saleId, outletId, userId ?? null, reason ?? null], type: QueryTypes.SELECT, transaction },
+  );
+
+  return rows[0] ?? null;
+}
+
+/**
+ * The line items of a sale, for restoring stock. Ordered by menu_item_id so
+ * the void restores stock in the same ascending order the sale deducted it —
+ * keeping one global lock order across both operations, which is what makes
+ * deadlock between a void and a concurrent sale impossible.
+ */
+export async function findItemsForVoid(saleId, { transaction }) {
+  if (!transaction) throw new Error('findItemsForVoid requires a transaction');
+
+  return sequelize.query(
+    `SELECT menu_item_id AS "menuItemId",
+            item_name    AS "itemName",
+            quantity     AS "quantity"
+       FROM sale_items
+      WHERE sale_id = $1
+      ORDER BY menu_item_id ASC`,
+    { bind: [saleId], type: QueryTypes.SELECT, transaction },
+  );
+}
+
+/** Reads a sale's current state, used to explain why a void was refused. */
+export async function findStatus(saleId, outletId, { transaction }) {
+  const [row] = await sequelize.query(
+    `SELECT id, status AS "status", receipt_no AS "receiptNo", credit_note_no AS "creditNoteNo"
+       FROM sales WHERE id = $1 AND outlet_id = $2`,
+    { bind: [saleId, outletId], type: QueryTypes.SELECT, transaction },
+  );
+  return row ?? null;
 }

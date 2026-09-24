@@ -115,6 +115,34 @@ export async function deduct(outletId, menuItemId, qty, { transaction }) {
   return rows[0] ?? null;
 }
 
+/**
+ * Returns stock to the shelf when a sale is voided.
+ *
+ * No guard predicate here, unlike deduct(): this only ever increases the
+ * quantity, so it cannot violate the non-negative constraint and has nothing
+ * to lose a race against. The row is still locked for the rest of the
+ * transaction, which is what serialises it against a concurrent sale of the
+ * same item.
+ */
+export async function restore(outletId, menuItemId, qty, { transaction }) {
+  if (!transaction) throw new Error('restore requires a transaction');
+
+  const rows = await sequelize.query(
+    `UPDATE inventory
+        SET quantity = quantity + $3,
+            updated_at = now()
+      WHERE outlet_id = $1
+        AND menu_item_id = $2
+      RETURNING quantity AS "remaining"`,
+    { bind: [outletId, menuItemId, qty], type: QueryTypes.SELECT, transaction },
+  );
+
+  // Null means the item has since been unassigned from the outlet, so there is
+  // no row to credit the stock back to. The caller decides whether that is
+  // fatal; the money side of the void must still go through.
+  return rows[0] ?? null;
+}
+
 export async function removeRow(outletId, menuItemId, { transaction }) {
   if (!transaction) throw new Error('removeRow requires a transaction');
 

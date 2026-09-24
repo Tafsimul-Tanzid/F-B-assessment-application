@@ -20,6 +20,7 @@ erDiagram
     OUTLETS ||--o{ OUTLET_MENU_ITEMS : "is assigned"
     OUTLETS ||--o{ INVENTORY : "holds stock in"
     OUTLETS ||--|| OUTLET_RECEIPT_COUNTERS : "numbers receipts with"
+    OUTLETS ||--|| OUTLET_CREDIT_NOTE_COUNTERS : "numbers voids with"
     OUTLETS ||--o{ SALES : "rings up"
 
     MENU_ITEMS ||--o{ OUTLET_MENU_ITEMS : "is assigned to"
@@ -77,6 +78,11 @@ erDiagram
         bigint last_receipt_no "bumped inside the sale txn"
     }
 
+    OUTLET_CREDIT_NOTE_COUNTERS {
+        uuid outlet_id PK_FK
+        bigint last_credit_note_no "separate sequence for voids"
+    }
+
     SALES {
         uuid id PK
         uuid outlet_id FK
@@ -85,6 +91,11 @@ erDiagram
         integer item_count
         timestamptz sold_at
         uuid cashier_id FK
+        text status "completed | voided"
+        bigint credit_note_no "UNIQUE per outlet, set on void"
+        timestamptz voided_at
+        uuid voided_by FK
+        text void_reason
     }
 
     SALE_ITEMS {
@@ -121,6 +132,16 @@ rolled-back transaction never returns its number. `outlet_receipt_counters`
 gives each outlet its own counter, incremented and read atomically inside the
 sale transaction. Section 2 covers the locking.
 
+**Voids keep the sale and number themselves separately.** Voiding does not
+delete the sale or free its receipt number — the sale happened, and the books
+must show both it and the correction. The sale is marked `voided`, stock is
+returned, and a credit note is allocated from `outlet_credit_note_counters`,
+a sequence deliberately distinct from receipts so the two document types can
+never be confused in an audit. Concurrent double-voids are prevented by the
+same guarded-update pattern as stock deduction: `AND status = 'completed'` in
+the `WHERE` clause means the loser of a race re-evaluates against the
+committed row and matches nothing.
+
 **Menu items deactivate rather than delete.** Besides preserving historical
 references, a hard `DELETE` takes a `FOR UPDATE` lock on the `menu_items` row,
 which conflicts with the `FOR KEY SHARE` lock that every concurrent
@@ -137,7 +158,7 @@ simultaneously.
 | `outlet_receipt_counters (outlet_id)` PK | The lock target — must be an exact lookup, never a scan |
 | `sales (outlet_id, receipt_no)` UNIQUE | The per-outlet sequence invariant itself, enforced by the database |
 | `sale_items (sale_id)` | **Not automatic.** Postgres indexes a foreign key's *target*, never the referencing column. Without it, receipt reprint and the top-items join both sequential-scan |
-| `sales (outlet_id, sold_at) INCLUDE (total_amount)` | Makes the revenue report an index-only scan. `sold_at` is monotonic, so inserts land at the right edge of the B-tree with minimal page splitting |
+| `sales (outlet_id, sold_at) INCLUDE (total_amount) WHERE status = 'completed'` | Makes the revenue report an index-only scan. Partial, because every report counts completed sales only, so voided rows would be dead weight. `sold_at` is monotonic, so inserts land at the right edge of the B-tree with minimal page splitting |
 | `users (email)` UNIQUE | Login |
 
 **Deliberately omitted: `sale_items (menu_item_id)`.** The top-items report

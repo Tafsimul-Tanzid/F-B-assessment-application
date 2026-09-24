@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, money } from '../api/client.js';
 import { Card, Empty, ErrorNote, Loading } from '../shared/ui.jsx';
 
 export function SalesHistoryPage() {
+  const queryClient = useQueryClient();
   const [selected, setSelected] = useState(null);
+  const [voiding, setVoiding] = useState(null);
+  const [reason, setReason] = useState('');
 
   const sales = useQuery({
     queryKey: ['outlet-sales'],
@@ -18,6 +21,19 @@ export function SalesHistoryPage() {
     enabled: Boolean(selected),
   });
 
+  const voidSale = useMutation({
+    mutationFn: ({ saleId, reason: why }) =>
+      api(`/outlet/sales/${saleId}/void`, { method: 'POST', body: { reason: why } }),
+    onSuccess: () => {
+      setVoiding(null);
+      setReason('');
+      // Stock came back and the reports changed, so both must be re-read.
+      queryClient.invalidateQueries({ queryKey: ['outlet-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['outlet-sale'] });
+      queryClient.invalidateQueries({ queryKey: ['outlet-menu'] });
+    },
+  });
+
   const rows = sales.data?.sales ?? [];
 
   return (
@@ -25,7 +41,8 @@ export function SalesHistoryPage() {
       <div className="page-head"><h1>Sales</h1></div>
       <p className="page-sub">
         This outlet's own receipts, numbered sequentially from #1 and independently of every other
-        outlet. Reprints show the prices exactly as they were charged.
+        outlet. Reprints show the prices exactly as they were charged. Voiding returns the stock
+        and issues a credit note — the sale itself is kept, and its receipt number is never reused.
       </p>
 
       <div className="pos">
@@ -41,22 +58,50 @@ export function SalesHistoryPage() {
                 <thead>
                   <tr>
                     <th>Receipt</th><th>Time</th><th className="num">Lines</th>
-                    <th className="num">Total</th><th>Cashier</th><th />
+                    <th className="num">Total</th><th>Status</th><th />
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((sale) => (
-                    <tr key={sale.id}>
-                      <td><strong>#{sale.receiptNo}</strong></td>
-                      <td className="muted small">{new Date(sale.soldAt).toLocaleString()}</td>
-                      <td className="num">{sale.itemCount}</td>
-                      <td className="num"><strong>{money(sale.totalAmount)}</strong></td>
-                      <td className="muted small">{sale.cashierName ?? '—'}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="btn sm" onClick={() => setSelected(sale.id)}>Reprint</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((sale) => {
+                    const isVoided = sale.status === 'voided';
+                    return (
+                      <tr key={sale.id}>
+                        <td>
+                          <strong style={isVoided ? { textDecoration: 'line-through' } : undefined}>
+                            #{sale.receiptNo}
+                          </strong>
+                        </td>
+                        <td className="muted small">{new Date(sale.soldAt).toLocaleString()}</td>
+                        <td className="num">{sale.itemCount}</td>
+                        <td className="num">
+                          <strong style={isVoided ? { textDecoration: 'line-through' } : undefined}>
+                            {money(sale.totalAmount)}
+                          </strong>
+                        </td>
+                        <td>
+                          {isVoided ? (
+                            /* Icon plus words, never colour alone. */
+                            <span className="pill out">
+                              <span aria-hidden="true">●</span> Voided · CN#{sale.creditNoteNo}
+                            </span>
+                          ) : (
+                            <span className="pill ok"><span aria-hidden="true">✓</span> Completed</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button className="btn sm" onClick={() => setSelected(sale.id)}>Reprint</button>{' '}
+                          {!isVoided && (
+                            <button
+                              className="btn sm danger"
+                              onClick={() => { setVoiding(sale); setReason(''); }}
+                            >
+                              Void
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -64,6 +109,42 @@ export function SalesHistoryPage() {
         </Card>
 
         <div>
+          {voiding && (
+            <div style={{ marginBottom: 16 }}>
+              <Card title={`Void receipt #${voiding.receiptNo}?`}>
+                <p className="small" style={{ marginTop: 0, lineHeight: 1.5 }}>
+                  This returns <strong>{voiding.itemCount}</strong> line
+                  {voiding.itemCount === 1 ? '' : 's'} worth {money(voiding.totalAmount)} to stock and
+                  issues a credit note. The sale is kept in the books and its receipt number is not
+                  reused.
+                </p>
+
+                <label className="field">
+                  <span>Reason (recorded against the void)</span>
+                  <input
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Customer changed their mind"
+                    autoFocus
+                  />
+                </label>
+
+                <ErrorNote error={voidSale.error} />
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button
+                    className="btn danger"
+                    disabled={reason.trim().length < 3 || voidSale.isPending}
+                    onClick={() => voidSale.mutate({ saleId: voiding.id, reason })}
+                  >
+                    {voidSale.isPending ? 'Voiding…' : 'Void this sale'}
+                  </button>
+                  <button className="btn" onClick={() => setVoiding(null)}>Cancel</button>
+                </div>
+              </Card>
+            </div>
+          )}
+
           {selected && (
             <Card title="Reprint">
               {detail.isLoading ? (
@@ -74,6 +155,16 @@ export function SalesHistoryPage() {
                   <div className="muted small" style={{ marginBottom: 12 }}>
                     {detail.data.sale.outletName} · {new Date(detail.data.sale.soldAt).toLocaleString()}
                   </div>
+
+                  {detail.data.sale.status === 'voided' && (
+                    <div className="alert error" style={{ marginBottom: 12 }}>
+                      <span aria-hidden="true">●</span>
+                      <span>
+                        <strong>Voided</strong> — credit note #{detail.data.sale.creditNoteNo}
+                        {detail.data.sale.voidReason ? ` · ${detail.data.sale.voidReason}` : ''}
+                      </span>
+                    </div>
+                  )}
                   {detail.data.sale.items.map((item, i) => (
                     <div className="receipt-line" key={i}>
                       <span>{Number(item.quantity)} × {item.itemName}</span>

@@ -126,6 +126,12 @@ export async function up({ context: queryInterface, sequelize }) {
       opts,
     );
 
+    await queryInterface.bulkInsert(
+      'outlet_credit_note_counters',
+      OUTLETS.map((o) => ({ outlet_id: o.id, last_credit_note_no: 0 })),
+      opts,
+    );
+
     const assignmentRows = [];
     const inventoryRows = [];
 
@@ -175,6 +181,7 @@ export async function down({ context: queryInterface, sequelize }) {
     await queryInterface.bulkDelete('inventory', {}, opts);
     await queryInterface.bulkDelete('outlet_menu_items', {}, opts);
     await queryInterface.bulkDelete('outlet_receipt_counters', {}, opts);
+    await queryInterface.bulkDelete('outlet_credit_note_counters', {}, opts);
     await queryInterface.bulkDelete('menu_items', {}, opts);
     await queryInterface.bulkDelete('outlets', {}, opts);
   });

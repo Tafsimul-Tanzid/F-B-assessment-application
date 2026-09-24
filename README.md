@@ -79,7 +79,7 @@ requests" and that the system "must prevent negative stock". Both are asserted
 by the test suite, and both can be demonstrated against a running stack:
 
 ```bash
-npm test --prefix server          # 31 tests against real PostgreSQL
+npm test --prefix server          # 41 tests against real PostgreSQL
 node scripts/concurrency-proof.mjs
 ```
 
@@ -166,6 +166,7 @@ All endpoints are under `/api`. Authenticated requests carry
 | `POST` | `/api/outlet/sales` | Create a sale — `{ items: [{ menuItemId, quantity }] }` |
 | `GET` | `/api/outlet/sales` | This outlet's receipts — `?from=&to=&limit=` |
 | `GET` | `/api/outlet/sales/:id` | Receipt reprint |
+| `POST` | `/api/outlet/sales/:id/void` | Void a sale — restores stock, issues a credit note |
 
 **No outlet endpoint takes an outlet id.** The outlet is read from the JWT
 claim, so there is deliberately no parameter through which one terminal could
@@ -198,7 +199,7 @@ Every error has the same shape, with a request id that also appears in the logs:
 | 401 | `UNAUTHORIZED` |
 | 403 | `FORBIDDEN` |
 | 404 | `NOT_FOUND` |
-| 409 | `INSUFFICIENT_STOCK`, `DUPLICATE_SKU`, `ALREADY_ASSIGNED`, `STOCK_REMAINING` |
+| 409 | `INSUFFICIENT_STOCK`, `DUPLICATE_SKU`, `ALREADY_ASSIGNED`, `STOCK_REMAINING`, `ALREADY_VOIDED` |
 | 422 | `ITEM_NOT_ON_MENU`, `ITEM_UNAVAILABLE`, `ITEM_NOT_STOCKED` |
 | 503 | `RETRYABLE`, `LOCK_TIMEOUT` |
 
@@ -212,6 +213,7 @@ Full ERD and rationale in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#1-data-mod
 outlets ──┬── outlet_menu_items ──── menu_items      HQ assigns; price_override per outlet
           ├── inventory ─────────────┘               stock per outlet, CHECK (quantity >= 0)
           ├── outlet_receipt_counters                one counter row per outlet
+          ├── outlet_credit_note_counters            separate sequence for voids
           └── sales ──── sale_items                  UNIQUE (outlet_id, receipt_no)
 users ────┘                                          HQ_ADMIN | OUTLET_STAFF (+ outlet_id)
 ```
@@ -224,6 +226,8 @@ users ────┘                                          HQ_ADMIN | OUTLET
 | `sales UNIQUE (outlet_id, receipt_no)` | Duplicate receipt numbers within an outlet. `NOT DEFERRABLE`, so a violation fails immediately rather than aborting at commit after all the work is done |
 | `users CHECK ((role = 'OUTLET_STAFF') = (outlet_id IS NOT NULL))` | Staff with no outlet scope, which would bypass every per-outlet access check |
 | `sale_items CHECK (quantity > 0)` | Zero or negative line quantities |
+| `sales UNIQUE (outlet_id, credit_note_no)` | Duplicate credit notes. NULLs do not collide, so completed sales are unaffected |
+| `sales CHECK ((status = 'voided') = (voided_at IS NOT NULL AND credit_note_no IS NOT NULL))` | A half-written void — a sale marked voided with no credit note, or a credit note on a sale still counted as revenue |
 | FKs with `ON DELETE RESTRICT` on sales | Deleting an outlet or item that has sales history |
 
 ### Three schema decisions
@@ -244,6 +248,21 @@ hard `DELETE` takes a `FOR UPDATE` lock that conflicts with the `FOR KEY SHARE`
 lock every concurrent `INSERT INTO sale_items` holds on that row — so one HQ
 deletion would block, and could deadlock against, in-flight sales of that item
 at every outlet at once.
+
+### Voids
+
+A sale is a record of something that happened, so voiding never deletes the
+row and never frees the receipt number — the next sale after a void of #1 is
+#2, not #1. The sale is marked `voided`, its stock is returned, and the void
+is issued its own number from a **separate per-outlet credit-note sequence**,
+so an audit can tell the two kinds of document apart. Every report counts
+`status = 'completed'` only, and the reporting index is partial on the same
+predicate, so voided rows are not even carried in it.
+
+Double-voiding is prevented by the same guarded-update technique as the stock
+deduction — `... AND status = 'completed'` in the `WHERE` clause — so ten
+simultaneous void requests produce exactly one void and nine 409s, rather than
+restoring stock ten times. There is a test for precisely that.
 
 ### Indexing
 
@@ -368,7 +387,7 @@ change.
 npm test --prefix server
 ```
 
-31 integration tests against real PostgreSQL, covering the graded claims
+41 integration tests against real PostgreSQL, covering the graded claims
 rather than chasing coverage:
 
 | Suite | Asserts |
@@ -377,6 +396,7 @@ rather than chasing coverage:
 | `isolation` | An outlet sees only its own menu/stock/sales; cannot fetch another outlet's receipt by id; role separation both ways; tampered tokens rejected |
 | `pricing` | Override beats base price; clearing it falls back; client-supplied prices rejected; a recorded sale is unchanged by later price and name changes; header total equals the sum of line totals |
 | `reports` | Figures checked against hand-computed arithmetic; zero-revenue outlets still appear; renamed items stay one row; date range respected |
+| `void` | Stock returned exactly once; receipt number never reused; credit notes sequential per outlet; 10 concurrent voids yield exactly one; cannot void another outlet's sale; voided money and units leave both reports |
 
 ---
 
@@ -415,15 +435,11 @@ bug. And `SEED_ON_BOOT` is `true` so the demo accounts exist; it would be
 
 ## Scope
 
-Built to the brief and no further. Deliberately **not** included, each of which
-would be a straightforward addition:
+Built to the brief, plus voids/refunds. Deliberately **not** included, each of
+which would be a straightforward addition:
 
 - **Tax and discounts** — not in the brief; `sale_items` would gain `tax_rate`
   and `line_discount`, with the header totals following.
-- **Voids and refunds** — would restore stock via a compensating update, keep
-  the original sale with a `status` column, never reuse a receipt number, and
-  issue credit notes from a separate counter. All reports would then filter on
-  `status = 'completed'`.
 - **Recipe/BOM deduction** — selling a burger currently deducts one burger, not
   a bun plus a patty plus 30g of lettuce. This changes the lock-ordering key
   from `menu_item_id` to `ingredient_id` and nothing else about the design.

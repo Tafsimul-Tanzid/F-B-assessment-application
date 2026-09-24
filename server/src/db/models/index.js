@@ -74,6 +74,13 @@ export const OutletReceiptCounter = sequelize.define('OutletReceiptCounter', {
   lastReceiptNo: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
 }, { tableName: 'outlet_receipt_counters' });
 
+// Voids are numbered from their own per-outlet sequence, kept separate from
+// receipts so the two kinds of document are never confused in an audit.
+export const OutletCreditNoteCounter = sequelize.define('OutletCreditNoteCounter', {
+  outletId: { type: DataTypes.UUID, primaryKey: true },
+  lastCreditNoteNo: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+}, { tableName: 'outlet_credit_note_counters' });
+
 export const Sale = sequelize.define('Sale', {
   id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
   outletId: { type: DataTypes.UUID, allowNull: false },
@@ -82,6 +89,13 @@ export const Sale = sequelize.define('Sale', {
   itemCount: { type: DataTypes.INTEGER, allowNull: false },
   soldAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   cashierId: { type: DataTypes.UUID },
+  // A voided sale is kept, not deleted: it happened, and its receipt number
+  // stays consumed. Reports count 'completed' only.
+  status: { type: DataTypes.TEXT, allowNull: false, defaultValue: 'completed' },
+  voidedAt: { type: DataTypes.DATE },
+  voidedBy: { type: DataTypes.UUID },
+  voidReason: { type: DataTypes.TEXT },
+  creditNoteNo: { type: DataTypes.BIGINT },
 }, { tableName: 'sales' });
 
 export const SaleItem = sequelize.define('SaleItem', {
@@ -133,6 +147,7 @@ export const models = {
   OutletMenuItem,
   Inventory,
   OutletReceiptCounter,
+  OutletCreditNoteCounter,
   Sale,
   SaleItem,
 };
