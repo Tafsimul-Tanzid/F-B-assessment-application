@@ -10,6 +10,8 @@ every outlet.
 
 - [Architecture & scaling document](docs/ARCHITECTURE.md) — ERD, scaling plan,
   microservices evolution, offline POS strategy
+- [Requirements traceability](docs/REQUIREMENTS.md) — every line of the brief,
+  mapped to where it is implemented and where it is proven
 
 ---
 
@@ -355,7 +357,7 @@ error. See [`server/.env.example`](server/.env.example).
 ## Scaling
 
 Summarised here; the reasoning is in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#3-scaling-to-10-outlets--100000-transactions-per-month).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#3-scaling-to-10-outlets-and-100000-transactions-per-month).
 
 **10 outlets at 100,000 transactions/month is ~3,300 sales a day — about 0.04
 writes per second**, with a realistic peak of 5–15/sec. That is small: the

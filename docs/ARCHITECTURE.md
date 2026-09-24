@@ -242,7 +242,7 @@ audited "unused receipt" ledger, not a different locking strategy.
 
 ---
 
-## 3. Scaling to 10 outlets / 100,000 transactions per month
+## 3. Scaling to 10 outlets and 100,000 transactions per month
 
 ### Start with the arithmetic
 
@@ -352,7 +352,7 @@ balancer requires no code change.
 - **any `23514` check violation** — should be impossible, and means a write
   path bypassed the stock guard. Alert on it rather than merely logging it
 
-### 3.4 Application-level
+### 3.4 Application-level tuning
 
 - **Size the pool against peak concurrent sales**, not requests per second —
   a sale holds its connection for the whole transaction.
@@ -362,6 +362,74 @@ balancer requires no code change.
   push, loyalty callouts and SMS must all happen *after* `COMMIT`. Every
   millisecond spent on them before commit is a millisecond of held locks. This
   is the single easiest way to destroy the concurrency properties above.
+
+### 3.5 Architectural evolution
+
+The three sections above tune what exists. This one is about what the shape of
+the system becomes, in the order the pressure actually justifies each step.
+Each stage is listed with the **trigger** that makes it worth doing, because
+doing any of them early is how a system this size acquires complexity it never
+earns back.
+
+**Stage 0 — where it is today: a layered monolith.**
+One deployable, one database, strict internal layering. At 10 outlets and
+100k transactions a month this is the correct architecture, and the honest
+recommendation is to stay here. Nothing below should happen on a schedule;
+each is a response to a measured problem.
+
+**Stage 1 — enforce module boundaries inside the monolith.**
+*Trigger:* the team grows past the point where everyone knows the whole
+codebase, or changes to reporting start breaking the till.
+
+Group the existing layers by domain rather than by technical role —
+`catalog/`, `inventory/`, `sales/`, `reporting/`, each owning its routes,
+services and repositories — and forbid cross-domain repository imports, so a
+domain is reached only through its service interface. This is the cheapest
+step by a wide margin: it is a directory move plus a lint rule, it changes no
+runtime behaviour, and it converts "we might split this one day" from an
+aspiration into something mechanically checkable. It is also the step that
+makes every later stage tractable, because a service extraction then means
+replacing one service-interface call with a client call.
+
+**Stage 2 — separate the read path from the write path.**
+*Trigger:* reports measurably compete with the till — p99 sale latency rises
+when someone opens the dashboard.
+
+Point reporting at a read replica (§3.2), then, if it is still slow,
+materialise the aggregates. This is CQRS in its useful, modest form: the
+write model stays normalised and transactional, the read model becomes
+denormalised and eventually consistent. Worth being explicit that the
+*trade-off being bought* is staleness — a dashboard a minute behind is fine,
+a till a minute behind is not, which is exactly why the split runs along this
+line and not another.
+
+**Stage 3 — move non-transactional work out of the request.**
+*Trigger:* anything slow gets added to checkout — kitchen display push,
+receipt printing, loyalty accrual, e-receipt email.
+
+Introduce an **outbox table written inside the sale transaction** and a worker
+that relays from it. This matters more than it sounds: every one of those
+features is a candidate for being done inline, and each would extend the
+lock-hold window of the sale transaction, degrading exactly the concurrency
+properties §2 establishes. The outbox makes "do this after the sale" a
+first-class, durable, retryable concept rather than a `.then()` nobody
+monitors. It is also the precondition for stage 4 and for offline sync (§5.3),
+which is why it is worth building before either is needed.
+
+**Stage 4 — extract services, if and only if the pressure is real.**
+*Trigger:* independent scaling or independent deployment becomes a genuine
+constraint — not a preference.
+
+Covered in §4. The short version: extract Reporting first, and keep Sales and
+Inventory together permanently.
+
+**What deliberately does not change at this scale.** The API stays stateless,
+so horizontal scaling remains free. The sale stays a single ACID transaction —
+every stage above is designed to leave that untouched, because it is the one
+property that makes "prevent negative stock" a one-line guarantee rather than
+a distributed-systems problem. And Postgres stays the system of record; adding
+a second datastore before Postgres is demonstrably the bottleneck buys a
+consistency problem in exchange for nothing.
 
 ---
 
@@ -527,7 +595,7 @@ at all. Offline stock limits should also be conservative — a terminal that has
 been offline for an hour should warn on low-stock items rather than promising
 availability it cannot verify.
 
-### 5.5 POS ↔ KDS during an outage
+### 5.5 POS and KDS during an outage
 
 The kitchen display must keep receiving orders when the WAN is down but the LAN
 is up, which is the overwhelmingly common failure (a dead uplink, not dead
