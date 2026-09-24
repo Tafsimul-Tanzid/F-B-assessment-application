@@ -51,4 +51,14 @@ export async function assertDatabaseConnection() {
   await sequelize.authenticate();
 }
 
+/**
+ * Cheapest possible round trip to the database, for the health endpoint.
+ *
+ * This lives here rather than in a repository because it is infrastructure,
+ * not data access - there is no business entity involved.
+ */
+export async function pingDatabase() {
+  await sequelize.query('SELECT 1');
+}
+
 export default sequelize;
