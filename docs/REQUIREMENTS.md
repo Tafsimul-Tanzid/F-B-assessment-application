@@ -3,7 +3,7 @@
 Every line of the brief, mapped to where it is implemented and where it is
 proven. Written so a reviewer can verify each item without hunting.
 
-`npm test --prefix server` runs the 41 tests referenced below.
+`npm test --prefix server` runs the tests referenced below.
 
 ---
 
@@ -57,7 +57,7 @@ proven. Written so a reviewer can verify each item without hunting.
 | Error middleware | [`errorHandler.js`](../server/src/middleware/errorHandler.js) + [typed errors](../server/src/errors/index.js) + [SQLSTATE mapper](../server/src/db/errors.js) |
 | Environment config | [`config/index.js`](../server/src/config/index.js) — validated once at boot; `process.env` read nowhere else |
 | Database constraints | FKs, uniques and CHECKs in [`migrations/`](../server/migrations) — see README § Schema |
-| Proper indexing | See [§1 Indexes](ARCHITECTURE.md#indexes), including one index deliberately *not* created and why |
+| Proper indexing | See [architecture.md § Indexes](architecture.md#indexes), including one index deliberately *not* created and why |
 | Dockerfile | [`server/Dockerfile`](../server/Dockerfile) (multi-stage, non-root, healthcheck), [`web/Dockerfile`](../web/Dockerfile) |
 | docker-compose | [`docker-compose.yml`](../docker-compose.yml) — one command, waits for Postgres *healthy* |
 | Deployed instance | [`render.yaml`](../render.yaml) blueprint — **requires the reviewer's own hosting account to activate** |
@@ -66,28 +66,31 @@ proven. Written so a reviewer can verify each item without hunting.
 
 | Deliverable | Status |
 |---|---|
-| Deployed instance | Blueprint ready; **not activated** — needs a hosting account |
-| GitHub repository | Local repo with 11 clean commits; **not pushed** — needs an account |
+| Deployed instance | Blueprint ready; see the README's Deployment section for current status |
+| GitHub repository | See `git log --oneline` for the commit history |
 | Proper folder structure | See README § Project layout |
 | Clean commits | `git log --oneline` — one concern per commit, reasoning in each message |
-| README — setup instructions | [README § Quick start](../README.md#quick-start) |
-| README — API endpoints | [README § API](../README.md#api) |
-| README — schema explanation | [README § Schema](../README.md#schema) |
+| README — setup instructions | [README § Local Setup](../README.md#local-setup) |
+| README — API endpoints | [README § API Documentation](../README.md#api-documentation) |
+| README — schema explanation | [README § Database Schema](../README.md#database-schema) |
 | README — architecture explanation | [README § Architecture](../README.md#architecture) |
-| README — scaling strategy | [README § Scaling](../README.md#scaling) |
+| README — scaling strategy | [README § Scaling Strategy](../README.md#scaling-strategy) |
 
 ## Architecture documentation
 
 | Requirement | Where |
 |---|---|
-| ERD diagram for schema and relationships | [§1 ERD](ARCHITECTURE.md#erd) — Mermaid, rendered by GitHub from source |
-| Scaling plan — database scaling strategies | [§3.1](ARCHITECTURE.md#31-database) |
-| Scaling plan — reporting performance | [§3.2](ARCHITECTURE.md#32-reporting-performance) |
-| Scaling plan — infrastructure | [§3.3](ARCHITECTURE.md#33-infrastructure) |
-| Scaling plan — architectural evolution | [§3.5](ARCHITECTURE.md#35-architectural-evolution) |
-| Conversion to microservices — which components and why | [§4](ARCHITECTURE.md#4-evolution-to-microservices) |
-| Offline POS — syncing sales to HQ on reconnect | [§5.3](ARCHITECTURE.md#53-sync-on-reconnect) |
-| Offline POS — POS ↔ KDS during offline mode | [§5.5](ARCHITECTURE.md#55-pos-and-kds-during-an-outage) |
+| ERD diagram for schema and relationships | [architecture.md § 6 ERD](architecture.md#6-erd) — Mermaid, rendered by GitHub from source |
+| System overview, request flow, frontend/backend architecture | [architecture.md §§ 1–4](architecture.md#1-system-overview) |
+| Authentication, authorization | [architecture.md §§ 7–8](architecture.md#7-authentication) |
+| Transaction, inventory concurrency and receipt number strategy | [architecture.md § 9](architecture.md#9-transaction-strategy-inventory-concurrency-and-receipt-numbering) |
+| Error handling, validation | [architecture.md §§ 10–11](architecture.md#10-error-handling) |
+| Scaling plan — database scaling strategies | [scaling.md § Database scaling](scaling.md#database-scaling) |
+| Scaling plan — reporting performance | [scaling.md § Reporting performance](scaling.md#reporting-performance) |
+| Scaling plan — infrastructure | [scaling.md § Infrastructure](scaling.md#infrastructure) |
+| Scaling plan — architectural evolution | [scaling.md § Architectural evolution](scaling.md#architectural-evolution) |
+| Conversion to microservices — which components and why | [microservices.md](microservices.md) |
+| Offline POS — all 12 discussion points + POS/KDS communication | [offline-pos.md](offline-pos.md) |
 
 ## Beyond the brief
 

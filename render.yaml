@@ -17,7 +17,10 @@ services:
     runtime: docker
     plan: free
     rootDir: server
-    dockerfilePath: ./Dockerfile
+    # Repo-root-relative REGARDLESS of rootDir above - Render's own blueprint
+    # spec is explicit about this ("relative to the repo root"). `./Dockerfile`
+    # here would resolve to the repo root and fail the build.
+    dockerfilePath: server/Dockerfile
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -37,11 +40,20 @@ services:
         value: 8
       - key: JWT_SECRET
         generateValue: true
+      # NOT `fromService ... property: host`: that property is documented as
+      # "the service's hostname on the PRIVATE network" - it omits the
+      # https:// scheme (so a browser's Origin header, which always includes
+      # the scheme, would never string-match it) and is not even defined for
+      # a static-site service type in the first place. Render always exposes
+      # a service at https://<name>.onrender.com unless a custom domain is
+      # attached, so the full public URL is hardcoded here instead.
+      #
+      # VERIFY AFTER FIRST DEPLOY: if `fnb-pos-web` was already taken by
+      # another Render account, Render appends a random suffix to the actual
+      # subdomain - check the real URL in the dashboard and update this value
+      # (and VITE_API_BASE_URL below) if it differs.
       - key: CORS_ORIGIN
-        fromService:
-          name: fnb-pos-web
-          type: web
-          property: host
+        value: https://fnb-pos-web.onrender.com
       # Migrations run on boot so a deploy never serves a stale schema.
       - key: RUN_MIGRATIONS_ON_BOOT
         value: 'true'
@@ -60,12 +72,10 @@ services:
     staticPublishPath: ./dist
     envVars:
       # Compiled into the bundle at build time, so it must resolve during the
-      # build rather than at run time.
+      # build rather than at run time. See the CORS_ORIGIN comment above for
+      # why this is a hardcoded full URL rather than `fromService ... host`.
       - key: VITE_API_BASE_URL
-        fromService:
-          name: fnb-pos-api
-          type: web
-          property: host
+        value: https://fnb-pos-api.onrender.com
     routes:
       # Single-page app: the router owns the path, so unknown paths must serve
       # index.html or a refresh on /hq/reports would 404.
