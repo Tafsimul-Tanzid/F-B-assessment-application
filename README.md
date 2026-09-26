@@ -721,19 +721,21 @@ Actual output from the containerised stack:
 ```
 [1] 50 simultaneous sales at one outlet
 
+  item                             Coffee
   requests fired at once           50
   succeeded                        50                           PASS
-  elapsed                          133 ms
+  elapsed                          149 ms
   receipt range                    1 .. 50
   distinct receipt numbers         50                           PASS
   contiguous (no gaps)             true                         PASS
-  stock                            120 -> 70                    PASS
+  stock                            60 -> 10                     PASS
 
 [2] 40 simultaneous buyers competing for limited stock
 
+  item                             Burger (6 in stock)
   buyers                           40
-  succeeded                        8                            PASS
-  rejected                         32 {"INSUFFICIENT_STOCK":32}
+  succeeded                        6                            PASS
+  rejected                         34 {"INSUFFICIENT_STOCK":34}
   all rejections are clean 409     true                         PASS
   final stock                      0                            PASS
   stock never went negative        true                         PASS
@@ -742,11 +744,11 @@ Actual output from the containerised stack:
 [3] Two outlets selling at the same time keep separate sequences
 
   outlet A receipts                51..60                       PASS
-  outlet B receipts                1..10                        PASS
+  outlet B receipts                7..16                        PASS
 ```
 
-The third block of test 2 is the one worth dwelling on: **32 failed sales
-consumed no receipt numbers.** That is the payoff from bumping the counter at
+Test 2 is the one worth dwelling on: **34 failed sales consumed no receipt
+numbers.** That is the payoff from bumping the counter at
 the *end* of the transaction rather than the start — had it been bumped first,
 every rejected sale would have burned a number and left a gap in the outlet's
 books.

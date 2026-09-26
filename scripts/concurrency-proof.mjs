@@ -50,7 +50,7 @@ const assert = (ok) => { if (!ok) failures += 1; return mark(ok); };
 async function receiptRace() {
   console.log('\n[1] 50 simultaneous sales at one outlet\n');
 
-  const token = await login('downtown@fnb.test');
+  const token = await login('gulshan@fnb.test');
   const menu = await menuOf(token);
   const item = menu.find((m) => Number(m.stock) >= 50);
   if (!item) throw new Error('Need an item with at least 50 in stock; re-seed the database.');
@@ -83,7 +83,7 @@ async function receiptRace() {
 async function oversellRace() {
   console.log('\n[2] 40 simultaneous buyers competing for limited stock\n');
 
-  const token = await login('airport@fnb.test');
+  const token = await login('dhanmondi@fnb.test');
   const menu = await menuOf(token);
   const item = menu.find((m) => Number(m.stock) > 0 && Number(m.stock) <= 20);
   if (!item) throw new Error('Need an item with 1-20 in stock at the airport outlet; re-seed.');
@@ -122,7 +122,7 @@ async function oversellRace() {
 async function perOutletSequences() {
   console.log('\n[3] Two outlets selling at the same time keep separate sequences\n');
 
-  const [a, b] = await Promise.all([login('downtown@fnb.test'), login('mall@fnb.test')]);
+  const [a, b] = await Promise.all([login('gulshan@fnb.test'), login('dhanmondi@fnb.test')]);
   const [menuA, menuB] = await Promise.all([menuOf(a), menuOf(b)]);
 
   const itemA = menuA.find((m) => Number(m.stock) >= 10);
