@@ -168,7 +168,9 @@ export function ReportsPage() {
           </div>
 
           <Card title="Top 5 items per outlet" flush>
-            {topItems.isLoading ? (
+            {topItems.error ? (
+              <div style={{ padding: 16 }}><ErrorNote error={topItems.error} /></div>
+            ) : topItems.isLoading ? (
               <Loading />
             ) : !topItems.data?.outlets?.length ? (
               <Empty>No sales in this period yet.</Empty>

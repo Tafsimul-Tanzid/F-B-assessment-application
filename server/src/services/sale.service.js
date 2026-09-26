@@ -1,7 +1,6 @@
 import { Transaction } from 'sequelize';
 
-import { sequelize } from '../db/sequelize.js';
-import { config } from '../config/index.js';
+import { sequelize, applyLockTimeout } from '../db/sequelize.js';
 import { isRetryableDbError, mapDbError } from '../db/errors.js';
 import {
   ConflictError,
@@ -156,11 +155,7 @@ export async function createSale({ outletId, cashierId, lines }) {
       return await sequelize.transaction(
         { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
         async (transaction) => {
-          // Bounds how long this transaction will wait on a lock, so one stuck
-          // transaction cannot queue an entire outlet's sales behind it.
-          await sequelize.query(`SET LOCAL lock_timeout = '${config.db.lockTimeoutMs}ms'`, {
-            transaction,
-          });
+          await applyLockTimeout(transaction);
 
           const priced = await priceLines(outletId, aggregated, { transaction });
 
@@ -263,9 +258,7 @@ export async function voidSale({ saleId, outletId, userId, reason }) {
       return await sequelize.transaction(
         { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
         async (transaction) => {
-          await sequelize.query(`SET LOCAL lock_timeout = '${config.db.lockTimeoutMs}ms'`, {
-            transaction,
-          });
+          await applyLockTimeout(transaction);
 
           const voided = await saleRepository.voidSale(
             { saleId, outletId, userId, reason },

@@ -6,9 +6,8 @@
    categorical set. The outlets are not the subject - the amounts are - and a
    categorical palette here would imply a distinction that does not exist.
 
-   Dark values are declared twice on purpose: the media query covers the OS
-   setting, the [data-theme] scope covers the in-app toggle, and the toggle
-   must win in both directions.
+   Dark mode follows the OS preference only - there is no in-app toggle, so
+   dark values are declared under the media query alone.
 --------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
@@ -38,7 +37,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root {
     color-scheme: dark;
     --surface-1: #1a1a19;
     --page: #0d0d0d;
@@ -54,23 +53,6 @@
     --success-text: #0ca30c;
     --shadow: none;
   }
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --surface-1: #1a1a19;
-  --page: #0d0d0d;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --gridline: #2c2c2a;
-  --baseline: #383835;
-  --border: rgba(255, 255, 255, 0.1);
-  --series-1: #3987e5;
-  --series-1-soft: #184f95;
-  --good: #0ca30c;
-  --success-text: #0ca30c;
-  --shadow: none;
 }
 
 * { box-sizing: border-box; }
@@ -233,7 +215,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .btn.block { width: 100%; justify-content: center; }
 
 .field { display: flex; flex-direction: column; gap: 5px; }
-.field label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+/* The label element itself carries .field (see shared/ui.jsx's Field), so the
+   text lives in a child <span>, not a descendant <label>. */
+.field > span { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
 input, select {
   border: 1px solid var(--border);
   background: var(--surface-1);
@@ -264,8 +248,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .pill.ok { color: var(--success-text); }
 .pill.low { color: #8a5a00; }
 .pill.out { color: var(--critical); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .pill.low { color: var(--warning); } }
-:root[data-theme='dark'] .pill.low { color: var(--warning); }
+@media (prefers-color-scheme: dark) { .pill.low { color: var(--warning); } }
 
 .alert {
   padding: 11px 14px;

@@ -22,7 +22,17 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     api('/auth/me')
       .then((data) => { if (!cancelled) setUser(data.user); })
-      .catch(() => { if (!cancelled) logout(); })
+      .catch((err) => {
+        if (cancelled) return;
+        // Only a 401 means the session is actually invalid - clear the token
+        // for that case (the unauthorized handler above already does this,
+        // but it's cheap to be explicit here too). A transient network error
+        // or a 500 should not destroy a token that is still perfectly valid;
+        // the user is left logged out of THIS load, but a refresh once the
+        // API is reachable again logs them back in without re-entering a
+        // password.
+        if (err?.status === 401) logout();
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [logout]);

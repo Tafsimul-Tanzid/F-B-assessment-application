@@ -23,6 +23,14 @@ async function start() {
     logger.info(`API listening on port ${config.port}`, { env: config.env });
   });
 
+  // A failure to bind (e.g. EADDRINUSE) fires here, after start()'s own
+  // .catch below has already resolved - without this it is an uncaught
+  // exception with no structured log.
+  server.on('error', (error) => {
+    logger.error('Server failed to start', { message: error.message, code: error.code });
+    process.exit(1);
+  });
+
   const shutdown = async (signal) => {
     logger.info(`Received ${signal}, shutting down`);
     // Stop accepting new connections, let in-flight sales finish their
@@ -43,5 +51,21 @@ async function start() {
 
 start().catch((error) => {
   logger.error('Failed to start server', { message: error.message, stack: error.stack });
+  process.exit(1);
+});
+
+// Last-resort net: every await in this codebase is inside a try/catch or an
+// asyncHandler-wrapped route, so reaching here means something outside that
+// coverage went wrong. Log it with a stack rather than let the process die
+// silently or in an inconsistent state.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', {
+    message: reason?.message ?? String(reason),
+    stack: reason?.stack,
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', { message: error.message, stack: error.stack });
   process.exit(1);
 });

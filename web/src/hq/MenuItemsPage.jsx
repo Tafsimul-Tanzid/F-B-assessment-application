@@ -11,8 +11,12 @@ export function MenuItemsPage() {
   const [editing, setEditing] = useState(null);
   const [notice, setNotice] = useState(null);
 
+  // The key includes every param that changes the response. Without this,
+  // this query and OutletDetailPage's catalogue query (which fetches active
+  // items only) would collide on the same cache entry and each could serve
+  // the other's stale, wrong result for up to the 10s staleTime.
   const menuItems = useQuery({
-    queryKey: ['menu-items', search],
+    queryKey: ['menu-items', { search, includeInactive: true }],
     queryFn: () => api('/hq/menu-items', { params: { search: search || undefined, includeInactive: 'true' } }),
   });
 

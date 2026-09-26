@@ -27,8 +27,11 @@ export function OutletDetailPage() {
     queryFn: () => api(`/hq/outlets/${outletId}/menu`),
   });
 
+  // Distinct from MenuItemsPage's key: this fetches active items only (the
+  // default, no includeInactive param), which must not share a cache entry
+  // with the master menu's includeInactive=true query.
   const catalogue = useQuery({
-    queryKey: ['menu-items', ''],
+    queryKey: ['menu-items', { includeInactive: false }],
     queryFn: () => api('/hq/menu-items'),
   });
 
@@ -80,6 +83,8 @@ export function OutletDetailPage() {
         its stock topped up. Only assigned, available items appear on this outlet's till.
       </p>
 
+      <ErrorNote error={outlets.error} />
+
       <Card
         title="Assign an item from the master menu"
       >
@@ -106,7 +111,11 @@ export function OutletDetailPage() {
             {assign.isPending ? 'Assigning…' : 'Assign to this outlet'}
           </button>
         </div>
-        <ErrorNote error={assign.error} />
+        {/* catalogue.error surfaces here too: it silently emptied `available`
+            above, and without this the dropdown's "Every active item is
+            already assigned" message would misreport a failed fetch as a
+            business fact. */}
+        <ErrorNote error={assign.error ?? catalogue.error} />
         <p className="small muted" style={{ marginTop: 10, marginBottom: 0, lineHeight: 1.5 }}>
           Assigning creates the stock record at zero, so the item is on the menu but cannot be sold
           until it is stocked.

@@ -61,4 +61,19 @@ export async function pingDatabase() {
   await sequelize.query('SELECT 1');
 }
 
+/**
+ * Bounds how long a transaction will wait on a lock before giving up, so one
+ * stuck transaction cannot queue an entire outlet's sales behind it.
+ *
+ * Lives here rather than inline in a service: `SET LOCAL` is infrastructure
+ * (a session/transaction setting, not a business entity), and Postgres does
+ * not support bind parameters for a SET statement's value, so this is the one
+ * place that string interpolation of a config value is deliberately
+ * unavoidable - `lockTimeoutMs` is a zod-validated positive integer from our
+ * own config, never user input.
+ */
+export async function applyLockTimeout(transaction) {
+  await sequelize.query(`SET LOCAL lock_timeout = '${config.db.lockTimeoutMs}ms'`, { transaction });
+}
+
 export default sequelize;
