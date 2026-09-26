@@ -12,9 +12,8 @@ Business flow: **Single Company → Multiple Outlets → HQ assigns menu → Out
 create sales → HQ sees reports.**
 
 - [docs/architecture-documentation.md](docs/architecture-documentation.md) —
-  single consolidated document covering the ERD, system architecture,
-  scaling plan, microservices evolution, offline POS strategy, transaction
-  handling, deployment and testing in one place
+  the submission-ready Architecture Documentation: ERD, scaling plan,
+  microservices evolution, offline POS strategy
 - [docs/architecture.md](docs/architecture.md) — system overview, request
   flow, frontend/backend architecture, database design, authentication,
   authorization, transaction and concurrency strategy, error handling,
