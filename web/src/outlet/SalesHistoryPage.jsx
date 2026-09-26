@@ -68,7 +68,7 @@ export function SalesHistoryPage() {
                       <tr key={sale.id}>
                         <td>
                           <strong style={isVoided ? { textDecoration: 'line-through' } : undefined}>
-                            #{sale.receiptNo}
+                            #{sale.receiptNumber}
                           </strong>
                         </td>
                         <td className="muted small">{new Date(sale.soldAt).toLocaleString()}</td>
@@ -111,7 +111,7 @@ export function SalesHistoryPage() {
         <div>
           {voiding && (
             <div style={{ marginBottom: 16 }}>
-              <Card title={`Void receipt #${voiding.receiptNo}?`}>
+              <Card title={`Void receipt #${voiding.receiptNumber}?`}>
                 <p className="small" style={{ marginTop: 0, lineHeight: 1.5 }}>
                   This returns <strong>{voiding.itemCount}</strong> line
                   {voiding.itemCount === 1 ? '' : 's'} worth {money(voiding.totalAmount)} to stock and
@@ -151,7 +151,7 @@ export function SalesHistoryPage() {
                 <Loading />
               ) : detail.data ? (
                 <div className="receipt">
-                  <div className="receipt-no">#{detail.data.sale.receiptNo}</div>
+                  <div className="receipt-no">#{detail.data.sale.receiptNumber}</div>
                   <div className="muted small" style={{ marginBottom: 12 }}>
                     {detail.data.sale.outletName} · {new Date(detail.data.sale.soldAt).toLocaleString()}
                   </div>

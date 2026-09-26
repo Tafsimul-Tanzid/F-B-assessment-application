@@ -185,7 +185,7 @@ export function PosPage() {
             <div style={{ marginTop: 16 }}>
               <Card title="Receipt">
                 <div className="receipt">
-                  <div className="receipt-no">#{receipt.receiptNo}</div>
+                  <div className="receipt-no">#{receipt.receiptNumber}</div>
                   <div className="muted small" style={{ marginBottom: 12 }}>
                     {new Date(receipt.soldAt).toLocaleString()} · this outlet's own sequence
                   </div>

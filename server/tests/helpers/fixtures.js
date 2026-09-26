@@ -49,9 +49,17 @@ export async function resetDatabase() {
   // which is what bind parameters use, allows only one command per statement.
   const exec = (sql, bind) => sequelize.query(sql, { bind });
 
+  // `companies` is not in the TRUNCATE list above (nothing outlet-scoped ever
+  // needs to reset it), so the single row inserted by the companies migration
+  // survives every resetDatabase() call. Look it up rather than re-insert -
+  // inserting again would violate companies_name_key on the second test.
+  const [company] = await sequelize.query('SELECT id FROM companies LIMIT 1', {
+    type: QueryTypes.SELECT,
+  });
+
   await exec(
-    `INSERT INTO outlets (id, code, name) VALUES ($1, 'AAA', 'Outlet A'), ($2, 'BBB', 'Outlet B')`,
-    [IDS.outletA, IDS.outletB],
+    `INSERT INTO outlets (id, company_id, code, name) VALUES ($1, $3, 'AAA', 'Outlet A'), ($2, $3, 'BBB', 'Outlet B')`,
+    [IDS.outletA, IDS.outletB, company.id],
   );
 
   await exec(

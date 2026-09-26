@@ -15,6 +15,21 @@ import * as outletMenuRepository from '../repositories/outletMenu.repository.js'
 import * as saleRepository from '../repositories/sale.repository.js';
 
 /**
+ * Zero-padded display form of a receipt number (e.g. "000001"), alongside the
+ * real `receiptNo`.
+ *
+ * The database keeps `receiptNo` as a `bigint` - correct for the unique
+ * constraint, for sorting, and for arithmetic - and this is purely a
+ * presentation format layered on top for the receipt and sales list, added
+ * here at the service boundary rather than in the repository or the database.
+ * 6 digits comfortably covers any outlet's expected sales volume; a 7th sale
+ * digit (1,000,000+) simply widens the string rather than breaking anything.
+ */
+function withReceiptNumber(sale) {
+  return sale ? { ...sale, receiptNumber: String(sale.receiptNo).padStart(6, '0') } : sale;
+}
+
+/**
  * Collapses repeated lines for the same item into one, summing quantities.
  *
  * Two things depend on this:
@@ -172,7 +187,7 @@ export async function createSale({ outletId, cashierId, lines }) {
 
           await saleRepository.insertSaleItems(sale.id, priced, { transaction });
 
-          return {
+          return withReceiptNumber({
             ...sale,
             outletId,
             items: priced.map((l) => ({
@@ -181,7 +196,7 @@ export async function createSale({ outletId, cashierId, lines }) {
               unitPrice: l.unitPrice,
               quantity: l.quantity,
             })),
-          };
+          });
         },
       );
     } catch (error) {
@@ -224,13 +239,14 @@ async function withRetry(operation, attempts = 3) {
 }
 
 export async function listSales(outletId, filters) {
-  return saleRepository.findByOutlet(outletId, filters);
+  const sales = await saleRepository.findByOutlet(outletId, filters);
+  return sales.map(withReceiptNumber);
 }
 
 export async function getSale(saleId, outletId) {
   const sale = await saleRepository.findByIdForOutlet(saleId, outletId);
   if (!sale) throw new NotFoundError('Sale');
-  return sale;
+  return withReceiptNumber(sale);
 }
 
 /**
@@ -273,7 +289,7 @@ export async function voidSale({ saleId, outletId, userId, reason }) {
             if (!current) throw new NotFoundError('Sale');
 
             throw new ConflictError(
-              `Receipt #${current.receiptNo} was already voided (credit note #${current.creditNoteNo})`,
+              `Receipt #${String(current.receiptNo).padStart(6, '0')} was already voided (credit note #${current.creditNoteNo})`,
               'ALREADY_VOIDED',
               { saleId, receiptNo: current.receiptNo, creditNoteNo: current.creditNoteNo },
             );
@@ -311,7 +327,7 @@ export async function voidSale({ saleId, outletId, userId, reason }) {
             });
           }
 
-          return { ...voided, outletId, restoredItems: restored };
+          return withReceiptNumber({ ...voided, outletId, restoredItems: restored });
         },
       );
     } catch (error) {

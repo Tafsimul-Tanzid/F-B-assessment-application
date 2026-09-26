@@ -16,10 +16,15 @@ export async function getOutlet(id) {
  * Creating an outlet also creates its counter rows, in one transaction. An
  * outlet without them cannot sell or void, so they must not be able to exist
  * apart from the outlet.
+ *
+ * The scenario is a single company, so the outlet is attached to it
+ * automatically rather than asking the caller to supply a company id that
+ * has, today, exactly one possible value.
  */
 export async function createOutlet(data) {
-  const existing = await sequelize.transaction(async (transaction) => {
-    const outlet = await outletRepository.create(data, { transaction });
+  const created = await sequelize.transaction(async (transaction) => {
+    const company = await outletRepository.getOrCreateDefaultCompany({ transaction });
+    const outlet = await outletRepository.create({ ...data, companyId: company.id }, { transaction });
     await outletRepository.createCounters(outlet.id, { transaction });
     return outlet;
   }).catch((error) => {
@@ -29,7 +34,7 @@ export async function createOutlet(data) {
     throw error;
   });
 
-  return existing;
+  return created;
 }
 
 /**

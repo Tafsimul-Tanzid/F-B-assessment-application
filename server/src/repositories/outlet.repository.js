@@ -1,11 +1,27 @@
-import { Outlet, OutletCreditNoteCounter, OutletReceiptCounter } from '../db/models/index.js';
+import { Company, Outlet, OutletCreditNoteCounter, OutletReceiptCounter } from '../db/models/index.js';
 
 /**
  * @see ./README.md for the repository layer contract.
  */
 
+/**
+ * Returns the single company every outlet belongs to, creating it on first
+ * use. The scenario is explicitly "a single company," so there is exactly one
+ * row here; this exists as a lookup rather than a hardcoded id so seeding and
+ * the migration's own backfill both stay the single source of truth for its
+ * name.
+ */
+export async function getOrCreateDefaultCompany({ transaction } = {}) {
+  const [company] = await Company.findOrCreate({
+    where: {},
+    defaults: { name: 'Demo F&B Company' },
+    transaction,
+  });
+  return company;
+}
+
 export async function findAll({ transaction } = {}) {
-  return Outlet.findAll({ order: [['code', 'ASC']], transaction });
+  return Outlet.findAll({ order: [['code', 'ASC']], include: [{ model: Company, as: 'company' }], transaction });
 }
 
 export async function findById(id, { transaction } = {}) {

@@ -13,8 +13,15 @@ import { sequelize } from '../sequelize.js';
  * data-modifying CTE) — see the repositories.
  */
 
+export const Company = sequelize.define('Company', {
+  id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
+  name: { type: DataTypes.TEXT, allowNull: false, unique: true },
+  createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, { tableName: 'companies' });
+
 export const Outlet = sequelize.define('Outlet', {
   id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
+  companyId: { type: DataTypes.UUID, allowNull: false },
   code: { type: DataTypes.TEXT, allowNull: false, unique: true },
   name: { type: DataTypes.TEXT, allowNull: false },
   address: { type: DataTypes.TEXT },
@@ -114,6 +121,9 @@ export const SaleItem = sequelize.define('SaleItem', {
 User.belongsTo(Outlet, { foreignKey: 'outletId', as: 'outlet' });
 Outlet.hasMany(User, { foreignKey: 'outletId', as: 'staff' });
 
+Outlet.belongsTo(Company, { foreignKey: 'companyId', as: 'company' });
+Company.hasMany(Outlet, { foreignKey: 'companyId', as: 'outlets' });
+
 Outlet.belongsToMany(MenuItem, {
   through: OutletMenuItem,
   foreignKey: 'outletId',
@@ -141,6 +151,7 @@ SaleItem.belongsTo(Sale, { foreignKey: 'saleId', as: 'sale' });
 SaleItem.belongsTo(MenuItem, { foreignKey: 'menuItemId', as: 'menuItem' });
 
 export const models = {
+  Company,
   Outlet,
   User,
   MenuItem,

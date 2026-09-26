@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs';
+import { QueryTypes } from 'sequelize';
 
 /**
  * Demo dataset so a reviewer can open the deployed instance and immediately
- * have something to click: one HQ admin, three outlets with their own staff
- * logins, a shared master menu, per-outlet assignments (including two price
- * overrides), and opening stock.
+ * have something to click: one HQ admin, two outlets with their own staff
+ * logins, a shared master menu, per-outlet assignments (including a price
+ * override), and opening stock.
  *
  * Deliberately no sales — the reports should start empty so that ringing up a
  * sale visibly moves the numbers.
@@ -13,96 +14,86 @@ import bcrypt from 'bcryptjs';
 const PASSWORD = 'Password123!';
 
 const OUTLETS = [
-  { id: 'a0000000-0000-4000-8000-000000000001', code: 'DT-01', name: 'Downtown Café', address: '12 Market Street' },
-  { id: 'a0000000-0000-4000-8000-000000000002', code: 'AP-02', name: 'Airport Kiosk', address: 'Terminal 2, Gate B' },
-  { id: 'a0000000-0000-4000-8000-000000000003', code: 'MS-03', name: 'Mall Stand', address: 'Level 3, Central Mall' },
+  { id: 'a0000000-0000-4000-8000-000000000001', code: 'GUL-01', name: 'Gulshan Outlet', address: 'Road 11, Gulshan 1, Dhaka' },
+  { id: 'a0000000-0000-4000-8000-000000000002', code: 'DHM-02', name: 'Dhanmondi Outlet', address: 'Road 27, Dhanmondi, Dhaka' },
 ];
 
 const MENU_ITEMS = [
-  { id: 'b0000000-0000-4000-8000-000000000001', sku: 'COF-ESP', name: 'Espresso', category: 'Coffee', basePrice: '3.00' },
-  { id: 'b0000000-0000-4000-8000-000000000002', sku: 'COF-LAT', name: 'Latte', category: 'Coffee', basePrice: '4.50' },
-  { id: 'b0000000-0000-4000-8000-000000000003', sku: 'COF-CAP', name: 'Cappuccino', category: 'Coffee', basePrice: '4.25' },
-  { id: 'b0000000-0000-4000-8000-000000000004', sku: 'COF-AME', name: 'Americano', category: 'Coffee', basePrice: '3.50' },
-  { id: 'b0000000-0000-4000-8000-000000000005', sku: 'TEA-GRN', name: 'Green Tea', category: 'Tea', basePrice: '3.25' },
-  { id: 'b0000000-0000-4000-8000-000000000006', sku: 'TEA-CHA', name: 'Chai Latte', category: 'Tea', basePrice: '4.00' },
-  { id: 'b0000000-0000-4000-8000-000000000007', sku: 'FOD-CRO', name: 'Butter Croissant', category: 'Food', basePrice: '3.75' },
-  { id: 'b0000000-0000-4000-8000-000000000008', sku: 'FOD-SAN', name: 'Chicken Sandwich', category: 'Food', basePrice: '7.50' },
-  { id: 'b0000000-0000-4000-8000-000000000009', sku: 'FOD-SAL', name: 'Garden Salad', category: 'Food', basePrice: '6.95' },
-  { id: 'b0000000-0000-4000-8000-000000000010', sku: 'FOD-MUF', name: 'Blueberry Muffin', category: 'Food', basePrice: '3.25' },
-  { id: 'b0000000-0000-4000-8000-000000000011', sku: 'CLD-ICE', name: 'Iced Coffee', category: 'Cold', basePrice: '4.75' },
-  { id: 'b0000000-0000-4000-8000-000000000012', sku: 'CLD-SMO', name: 'Mango Smoothie', category: 'Cold', basePrice: '5.50' },
+  { id: 'b0000000-0000-4000-8000-000000000001', sku: 'FOD-BUR', name: 'Burger', category: 'Food', basePrice: '8.50' },
+  { id: 'b0000000-0000-4000-8000-000000000002', sku: 'FOD-PIZ', name: 'Pizza', category: 'Food', basePrice: '12.00' },
+  { id: 'b0000000-0000-4000-8000-000000000003', sku: 'FOD-PAS', name: 'Pasta', category: 'Food', basePrice: '10.50' },
+  { id: 'b0000000-0000-4000-8000-000000000004', sku: 'FOD-FRI', name: 'Fries', category: 'Food', basePrice: '4.00' },
+  { id: 'b0000000-0000-4000-8000-000000000005', sku: 'BEV-COF', name: 'Coffee', category: 'Beverage', basePrice: '3.50' },
+  { id: 'b0000000-0000-4000-8000-000000000006', sku: 'BEV-SOD', name: 'Soft Drink', category: 'Beverage', basePrice: '2.50' },
 ];
 
 /**
- * Per-outlet assignment. The airport kiosk charges a premium on everything it
- * carries (captive-audience pricing) and carries a narrower range; the mall
- * stand skips the hot food.
+ * Per-outlet assignment. Gulshan carries the full menu at base price.
+ * Dhanmondi does not carry Pasta (demonstrates "outlet sees only its assigned
+ * menu") and charges more for Pizza (demonstrates the price override).
  */
 const ASSIGNMENTS = {
   'a0000000-0000-4000-8000-000000000001': MENU_ITEMS.map((m) => ({ menuItemId: m.id, priceOverride: null })),
-  'a0000000-0000-4000-8000-000000000002': [
-    { menuItemId: 'b0000000-0000-4000-8000-000000000001', priceOverride: '4.00' },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000002', priceOverride: '5.75' },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000004', priceOverride: '4.50' },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000007', priceOverride: '4.95' },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000008', priceOverride: '9.50' },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000011', priceOverride: '6.00' },
-  ],
-  'a0000000-0000-4000-8000-000000000003': [
-    { menuItemId: 'b0000000-0000-4000-8000-000000000002', priceOverride: null },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000003', priceOverride: null },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000005', priceOverride: null },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000006', priceOverride: '3.75' },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000010', priceOverride: null },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000011', priceOverride: null },
-    { menuItemId: 'b0000000-0000-4000-8000-000000000012', priceOverride: null },
-  ],
+  'a0000000-0000-4000-8000-000000000002': MENU_ITEMS.filter((m) => m.sku !== 'FOD-PAS').map((m) => ({
+    menuItemId: m.id,
+    priceOverride: m.sku === 'FOD-PIZ' ? '13.50' : null,
+  })),
 };
 
 const USERS = [
   {
     id: 'c0000000-0000-4000-8000-000000000001',
     email: 'hq@fnb.test',
-    fullName: 'Hana Quereshi',
+    fullName: 'HQ Admin',
     role: 'HQ_ADMIN',
     outletId: null,
   },
   {
     id: 'c0000000-0000-4000-8000-000000000002',
-    email: 'downtown@fnb.test',
-    fullName: 'Dara Okonkwo',
+    email: 'gulshan@fnb.test',
+    fullName: 'Gulshan Outlet Staff',
     role: 'OUTLET_STAFF',
     outletId: 'a0000000-0000-4000-8000-000000000001',
   },
   {
     id: 'c0000000-0000-4000-8000-000000000003',
-    email: 'airport@fnb.test',
-    fullName: 'Alex Petrov',
+    email: 'dhanmondi@fnb.test',
+    fullName: 'Dhanmondi Outlet Staff',
     role: 'OUTLET_STAFF',
     outletId: 'a0000000-0000-4000-8000-000000000002',
   },
-  {
-    id: 'c0000000-0000-4000-8000-000000000004',
-    email: 'mall@fnb.test',
-    fullName: 'Mei Tanaka',
-    role: 'OUTLET_STAFF',
-    outletId: 'a0000000-0000-4000-8000-000000000003',
-  },
 ];
 
-// Opening stock. The airport kiosk runs deliberately thin so the
+// Opening stock. Dhanmondi runs deliberately thin on Burger so the
 // insufficient-stock path is easy to demonstrate without setting it up first.
 const OPENING_STOCK = {
-  'a0000000-0000-4000-8000-000000000001': 120,
-  'a0000000-0000-4000-8000-000000000002': 8,
-  'a0000000-0000-4000-8000-000000000003': 60,
+  'a0000000-0000-4000-8000-000000000001': { default: 60 },
+  'a0000000-0000-4000-8000-000000000002': { default: 40, 'FOD-BUR': 6 },
 };
+
+function stockFor(outletId, sku) {
+  const config = OPENING_STOCK[outletId];
+  return config[sku] ?? config.default;
+}
 
 export async function up({ context: queryInterface, sequelize }) {
   await sequelize.transaction(async (transaction) => {
     const opts = { transaction };
 
-    await queryInterface.bulkInsert('outlets', OUTLETS, opts);
+    // The core-schema and companies migrations run before any seeder, so the
+    // single company row already exists (created by the companies migration's
+    // backfill step). Reuse it rather than inserting a second one, which
+    // would violate companies_name_key.
+    const [company] = await sequelize.query('SELECT id FROM companies LIMIT 1', {
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+
+    await queryInterface.bulkInsert(
+      'outlets',
+      OUTLETS.map((o) => ({ ...o, company_id: company.id })),
+      opts,
+    );
 
     await queryInterface.bulkInsert(
       'menu_items',
@@ -116,10 +107,10 @@ export async function up({ context: queryInterface, sequelize }) {
       opts,
     );
 
-    // Every outlet needs its counter row to exist before it can sell. Creating
-    // it here (and in the outlet-creation service) keeps the sale path free of
-    // a lazy upsert, which would turn a plain index lookup into a possible
-    // insert conflict on the hot path.
+    // Every outlet needs its counter rows to exist before it can sell or void.
+    // Creating them here (and in the outlet-creation service) keeps the sale
+    // path free of a lazy upsert, which would turn a plain index lookup into
+    // a possible insert conflict on the hot path.
     await queryInterface.bulkInsert(
       'outlet_receipt_counters',
       OUTLETS.map((o) => ({ outlet_id: o.id, last_receipt_no: 0 })),
@@ -132,6 +123,7 @@ export async function up({ context: queryInterface, sequelize }) {
       opts,
     );
 
+    const skuById = new Map(MENU_ITEMS.map((m) => [m.id, m.sku]));
     const assignmentRows = [];
     const inventoryRows = [];
 
@@ -146,7 +138,7 @@ export async function up({ context: queryInterface, sequelize }) {
         inventoryRows.push({
           outlet_id: outletId,
           menu_item_id: assignment.menuItemId,
-          quantity: OPENING_STOCK[outletId],
+          quantity: stockFor(outletId, skuById.get(assignment.menuItemId)),
         });
       }
     }
