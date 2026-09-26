@@ -17,10 +17,14 @@ services:
     runtime: docker
     plan: free
     rootDir: server
-    # Repo-root-relative REGARDLESS of rootDir above - Render's own blueprint
-    # spec is explicit about this ("relative to the repo root"). `./Dockerfile`
-    # here would resolve to the repo root and fail the build.
-    dockerfilePath: server/Dockerfile
+    # Relative to rootDir above, confirmed against a real deploy - Render's
+    # blueprint spec text says this is repo-root-relative regardless of
+    # rootDir, but the actual build error when it was set to
+    # "server/Dockerfile" here was:
+    #   lstat /opt/render/project/src/server/server: no such file or directory
+    # i.e. Render joined rootDir + dockerfilePath (server + server/Dockerfile),
+    # doubling the segment. Real behavior wins over the docs.
+    dockerfilePath: Dockerfile
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
