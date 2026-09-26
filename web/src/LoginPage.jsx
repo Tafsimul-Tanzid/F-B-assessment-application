@@ -8,9 +8,8 @@ import { Card, ErrorNote, Field } from './shared/ui.jsx';
  */
 const DEMO = [
   { email: 'hq@fnb.test', role: 'HQ admin — all outlets' },
-  { email: 'downtown@fnb.test', role: 'Outlet staff — Downtown Café' },
-  { email: 'airport@fnb.test', role: 'Outlet staff — Airport Kiosk' },
-  { email: 'mall@fnb.test', role: 'Outlet staff — Mall Stand' },
+  { email: 'gulshan@fnb.test', role: 'Outlet staff — Gulshan Outlet' },
+  { email: 'dhanmondi@fnb.test', role: 'Outlet staff — Dhanmondi Outlet' },
 ];
 
 export function LoginPage() {
